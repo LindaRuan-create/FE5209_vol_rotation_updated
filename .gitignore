@@ -1,0 +1,28 @@
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary downloads (verify before replacing data/raw/etf_daily.csv)
+data/raw/*_download.csv
+
+# 01_data_update Local backups generated before replacement
+data/raw/*_backup.csv
+
+# Generated run logs
+results/logs/
+
+# Relocated environment backups (not submission material)
+.venv_old/
+.venv_backup*/

@@ -1,0 +1,8 @@
+﻿,Test,Statistic,pValue,Conclusion(5%)
+0,"Ljung-Box Return r, lag=5",6.337053745613112,0.27478952124104955,Do not reject
+1,"Ljung-Box Return r, lag=10",17.16235930422206,0.07084769912692478,Do not reject
+2,"Ljung-Box Return r, lag=20",36.769304459699306,0.012469824480217186,Reject the null hypothesis
+3,"Ljung-Box Squared returns r², lag=5",173.14681961886012,1.5544944883438354e-35,Reject the null hypothesis
+4,"Ljung-Box Squared returns r², lag=10",342.0070854334014,1.977571040046389e-67,Reject the null hypothesis
+5,"Ljung-Box Squared returns r², lag=20",599.4315377826955,3.7923972091181735e-114,Reject the null hypothesis
+6,"Engle ARCH-LM, lag=10",170.78902450942252,1.904242939199234e-31,Reject the null hypothesis

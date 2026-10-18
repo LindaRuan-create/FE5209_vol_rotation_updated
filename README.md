@@ -6,6 +6,8 @@ NUS RMI · FE5209 Financial Econometrics group project. The final strategy funds
 
 For immediate viewing, open **`results/Report.html`** in a browser; no Python installation is needed to read it. Keep the report inside `results` so its CSV download links work.
 
+To recalculate on Windows, extract the entire project ZIP, then double-click `run_all.bat`. It selects Python 3.10+ using `py -3`, `python`, or `python3`, creates a local Windows `.venv` when absent, installs missing dependencies, and runs the same pipeline as macOS. On success it opens `results/Report.html`; on failure it leaves the error visible. First-time setup requires internet access. If an existing `.venv` came from a Mac or another location, close its Python sessions and rename it to `.venv_old` before running; the launcher never deletes it automatically. No environment activation is required. Windows execution has not been tested on the current macOS computer.
+
 To recalculate on macOS, double-click `run_all.command`. If the local environment is absent, the launcher creates `.venv` and installs missing project dependencies automatically. This first-time setup requires Python 3.10+ and internet access; subsequent default runs use local data. Alternatively, install using the setup instructions below and use the project interpreter directly:
 
 ```bash
@@ -66,6 +68,7 @@ The machine-specific `.venv` need not be included in a submission archive. The m
 | `07_final_strategy.ipynb` | Historical independent-account evaluation, diversification, and bootstrap | `final_*` tables, signals, figures |
 | `08_final_strategy_live.ipynb` | Separate USD 100,000 simulated live-window accounts | `final_live_*` ledgers and report inputs |
 | `portfolio_accounting.py` | Shared native-session ledgers, independent funding, local cash, fees, and USD valuation | Used by 05/06 for shared definitions and by 07/08 for execution |
+| `run_all.command` / `run_all.bat` | macOS / Windows double-click launchers | Run the same `run_all.py` pipeline |
 | `run_all.py` | Stage orchestration, logging, and HTML generation | `results/Report.html` |
 
 The raw `etf_daily.csv` includes US ETFs, Singapore ETFs, and FX on a union of market dates. **Both 05 and 06 call `00_engine.load()` to filter US sessions before computing percentage changes.** US holiday rows therefore cannot remove the next valid US return. Only selecting US columns without filtering dates is insufficient. The 60-day lookback, inverse-volatility exponent of 1, and 30% target have not been tuned in this change.

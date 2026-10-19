@@ -1,160 +1,105 @@
 # FE5209 Volatility Rotation
 
-NUS RMI · FE5209 Financial Econometrics group project. The final strategy funds **90% in a US V2 account and 10% in a Singapore ES3/A35 account once at inception**. Thereafter the accounts operate independently. Their shares of total assets drift with returns and FX; no transfers restore 90/10.
+NUS RMI · FE5209 Financial Econometrics 小组项目（ReReRe）
 
-## Run and view the instructor report
+## 1. 策略一句话
 
-For immediate viewing, open **`results/Report.html`** in a browser; no Python installation is needed to read it. Keep the report inside `results` so its CSV download links work.
+每天美股收盘后，用 SPY 120 日均线判断大方向，再看各 ETF 的 RSI，按决策树选出下一交易日持有的 ETF，T+1 开盘执行。
 
-To recalculate on Windows, extract the entire project ZIP, then double-click `run_all.bat`. It selects Python 3.10+ using `py -3`, `python`, or `python3`, creates a local Windows `.venv` when absent, installs missing dependencies, and runs the same pipeline as macOS. On success it opens `results/Report.html`; on failure it leaves the error visible. First-time setup requires internet access. If an existing `.venv` came from a Mac or another location, close its Python sessions and rename it to `.venv_old` before running; the launcher never deletes it automatically. No environment activation is required. Windows execution has not been tested on the current macOS computer.
+**最终策略 = 美股 V2（目标波动 30%）+ 新加坡部分（ES3 GARCH + A35）**，2012-08-01 起按 **90% / 10% 一次性**分配资金，之后两个账户各自运作、互不转账。
 
-To recalculate on macOS, double-click `run_all.command`. If the local environment is absent, the launcher creates `.venv` and installs missing project dependencies automatically. This first-time setup requires Python 3.10+ and internet access; subsequent default runs use local data. Alternatively, install using the setup instructions below and use the project interpreter directly:
-
-```bash
-.venv/bin/python run_all.py
-```
-
-After a successful run, open `results/Report.html`. The macOS launcher attempts to open it automatically. The report includes daily equity and holdings, individual trades and costs, actual sleeve shares, source quote dates, execution statuses, and latest within-sleeve targets.
-
-The default run uses local price snapshots and executes **03 → 02 → 05 → 06 → 07 → 08**. It does not download prices. GARCH fitting, voting across 6,336 parameter sets, and robustness analysis take time. Each stage writes a log under `results/logs`. Execution stops if a stage fails; an existing report is not evidence that the new run succeeded.
-
-```bash
-# Download prices first, with backups, then rebuild all outputs.
-.venv/bin/python run_all.py --update-data
-
-# Render existing CSV snapshots only; no recalculation or third-party packages.
-python3 run_all.py --view-only
-
-# Run accounting and calendar regression tests.
-.venv/bin/python -m unittest discover -s tests
-```
-
-A generation date is not a price cutoff. Inspect the report's input dates and the `US_quote_date`, `SG_quote_date`, `FX_quote_date`, and status columns. A latest target is a plan for the next valid local session, not a fill.
-
-## Install on a new computer or after moving the folder
-
-Python 3.10 or later is required. A virtual environment is machine- and location-specific. Recreate it in its final directory rather than copying a Mac `.venv` to the teacher's machine.
-
-For a fresh environment:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python run_all.py
-```
-
-On Windows, use `.venv\Scripts\python` instead of `.venv/bin/python`. Optional activation uses `source .venv/bin/activate` on macOS or `.venv\Scripts\activate` on Windows. Direct interpreter invocation avoids accidentally selecting another Python installation.
-
-If an existing environment belongs to a previous folder path, close its running kernels, move it aside, then create a fresh one:
-
-```bash
-mv .venv .venv_old
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-```
-
-The machine-specific `.venv` need not be included in a submission archive. The macOS launcher recreates it when absent; manual setup is also available below. `requirements-lock.txt` records the validated Python 3.14 versions; `requirements.txt` supplies compatible dependency ranges for other Python versions. Do not include `.venv`, old environment copies, or `__pycache__` in the submission archive. `.gitignore` excludes them from Git, but not from an ordinary Finder copy or zip.
-
-## Strategy data flow
-
-| Stage | Role | Main output |
+| 层 | 文件 | 做什么 |
 |---|---|---|
-| `00_engine.ipynb` | Shared price loading, adjustments, fee rates, periods, and exact fee solver | Functions loaded by other stages |
-| `01_data_update.ipynb` | Optional download of US ETFs, Singapore ETFs, and USD/SGD | `data/raw/etf_daily.csv`, `sti_daily.csv` |
-| `02_parameter_ensemble.ipynb` | 6,336 parameter votes produce US V0 targets | `ensemble_weights_history.csv` |
-| `03_sti_garch.ipynb` | GARCH forecasts produce within-Singapore ES3/A35 targets and research diagnostics | `sti_weights_history.csv`, `sti_*` outputs |
-| `05_risk_allocation.ipynb` | Inverse-volatility allocation using 60 US trading returns, producing V1 | `risk_adjusted_weights.csv` |
-| `06_bsv_volatility_targeting.ipynb` | 30% annualized volatility target; released risk capital goes to BSV | `v2_weights_history.csv` |
-| `07_final_strategy.ipynb` | Historical independent-account evaluation, diversification, and bootstrap | `final_*` tables, signals, figures |
-| `08_final_strategy_live.ipynb` | Separate USD 100,000 simulated live-window accounts | `final_live_*` ledgers and report inputs |
-| `portfolio_accounting.py` | Shared native-session ledgers, independent funding, local cash, fees, and USD valuation | Used by 05/06 for shared definitions and by 07/08 for execution |
-| `run_all.command` / `run_all.bat` | macOS / Windows double-click launchers | Run the same `run_all.py` pipeline |
-| `run_all.py` | Stage orchestration, logging, and HTML generation | `results/Report.html` |
+| V0 参数投票 | `02_parameter_ensemble` | 7 个参数共 6,336 组，每组每天投 1 票，得票比例 = 仓位 |
+| V1 按波动率分配 | `05_risk_allocation` | V0 仓位 ÷ 各 ETF 过去 60 日波动率（α = 1）后归一 |
+| V2 目标波动 30% | `06_bsv_volatility_targeting` | V1 组合预测波动超过 30% 时等比例缩小风险资产，多出的钱放 BSV |
+| 新加坡部分 | `03_sti_garch` | GARCH 预测 ES3 明日波动，ES3 仓位 = min(目标波动 / 预测波动, 1)，其余持有 A35 |
 
-The raw `etf_daily.csv` includes US ETFs, Singapore ETFs, and FX on a union of market dates. **Both 05 and 06 call `00_engine.load()` to filter US sessions before computing percentage changes.** US holiday rows therefore cannot remove the next valid US return. Only selecting US columns without filtering dates is insufficient. The 60-day lookback, inverse-volatility exponent of 1, and 30% target have not been tuned in this change.
+标的：信号用 SPY、QQQ、SQQQ；美股交易 TQQQ、UVXY、TECL、SPXL、TECS、BSV；新加坡交易 ES3.SI（SPDR STI ETF）和 A35.SI（ABF Singapore Bond Index Fund）。
 
-The US signal universe includes SPY, QQQ, TQQQ, UVXY, TECL, SPXL, SQQQ, TECS, and BSV. The traded V2 pool is TQQQ, UVXY, TECL, SPXL, TECS, and BSV. Singapore uses ES3.SI and A35.SI, abbreviated ES3/A35 in the ledger. All execution prices are on a dividend-adjusted basis; fractional adjusted units are allowed.
+## 2. 怎么运行
 
-## Independent account and execution rules
+**只看结果：** 用浏览器打开 `results/Report.html`，不需要装 Python。报告要和 `results/` 文件夹放在一起，里面的 CSV 下载链接才有效。
 
-1. At the preceding valuation date, credit 90% of initial USD capital to the US account. Convert the remaining 10% to SGD once, using the latest available prior-to-start FX quote, and credit the Singapore account. There is no subsequent cross-account transfer or implicit borrowing.
-2. Each account rebalances daily **within its own assets**, at a valid native source opening, using the latest target dated strictly before that session. A newer known target replaces an older unexecuted target.
-3. Source opening prices remain missing where the source has no quote. A missing or invalid opening blocks sleeve trading. A missing closing mark can be carried for provisional valuation; it is not used to approve an earlier opening order. Filled valuation prices never execute.
-4. Holdings and local cash remain unchanged on absent source sessions. The consolidated calendar is the union of US and Singapore source-session dates, preserving US-only and Singapore-only changes. Current holdings, actual sleeve shares, and target percentages are separate quantities.
-5. Historical sleeve funding starts once at the beginning of the full backtest. It is not reset at the OOS boundary. The live window is a separate experiment initialized again with USD 90,000 and USD 10,000-equivalent SGD.
+**重新计算（需要 Python 3.10+，第一次需要联网装依赖）：**
 
-The latest target report contains `target_within_sleeve`, `current_sleeve_share`, `current_total_weight`, and `indicative_total_weight`. The indicative total weight equals the current account share times its model target; it is not an instruction to restore total-portfolio funding to 90/10. `final_weights_history.csv` retains its historical filename but now records **actual consolidated weight history**, not a sequence of fixed 90/10 global targets.
+- Windows：双击 `run_all.bat`
+- macOS：双击 `run_all.command`
+- 命令行：
 
-## Submission metric reference
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt      # Windows 用 .venv\Scripts\python
+.venv/bin/python run_all.py                  # 用本地数据重算全部结果，生成 results/Report.html
+.venv/bin/python run_all.py --update-data    # 先下载最新价格（会备份旧文件），再重算
+python run_all.py --view-only                # 不重算，只用现有 CSV 生成报告
+.venv/bin/python -m unittest discover -s tests   # 记账规则测试
+```
 
-For submission and presentations, quote historical performance from the **Submission reference: historical IS / OOS metrics** table in `results/Report.html`, generated directly from `results/tables/final_metrics.csv` by 07. For the final combined strategy, select the row `Final V2 + Singapore (initial 90/10; independent sleeves)` and state the period (IS, OOS, or OOS ex-2020). Use the same table for strategy comparisons. These metrics use the shared account ledger, union valuation calendar, and transaction costs. They describe the historical account funded in 2012, with no OOS allocation reset.
+`run_all.py` 按 **03 → 02 → 05 → 06 → 07 → 08** 的顺序运行，每一步的日志写在 `results/logs/`，任何一步出错就停止。6,336 组投票和 GARCH 每月重估比较慢，完整跑一次需要几分钟。
 
-Standalone notebook tables from 02/03/05/06 are research diagnostics, not the submission source for final portfolio performance. Their calendars, period slicing, and, in 03, cost and turnover conventions may differ; do not combine their headline metrics with final-table figures. Standardizing the citation source does not change those research calculations.
+也可以在 Jupyter / PyCharm 里逐个打开 notebook，Restart Kernel 后 Run All，顺序同上。`.venv` 和机器绑定，换电脑要重新建，不要拷贝。
 
-October tracking is a separate account: quote its results from the **Live tracking summary** table (`results/tables/final_live_summary.csv`), with the actual data cutoff. Do not label October tracking as historical OOS or splice its returns into historical performance.
+## 3. 文件和数据流
 
-## Two distinct account histories
+```text
+data/raw/etf_daily.csv ─┬─> 02 V0 投票 ─> 05 V1 ─> 06 V2 ─┐
+                        │                                  ├─> 07 历史回测 (2012-08 ~ 2026-09-30)
+data/raw/sti_daily.csv ─┴─> 03 新加坡 GARCH ───────────────┤
+                                                           └─> 08 实盘模拟 (2026-10-01 ~ 10-20)
+```
 
-| Item | Historical account (07) | October tracking account (08) |
+| 文件 | 作用 | 主要输出 |
 |---|---|---|
-| Inception | 2012-08-01 | 2026-10-01 |
-| Initial allocation | 90% US / 10% Singapore, once in 2012 | Fresh USD 100,000: USD 90,000 US / USD 10,000-equivalent SGD |
-| OOS boundary (2020-01-01) | Carry existing holdings and cash; no reset or new funding | Not applicable |
-| Subsequent allocation | Sleeve shares drift; no cross-account transfers | Sleeve shares drift; no cross-account transfers |
-| Connection | Continuous historical account across IS and OOS | Separate experiment; does not inherit historical holdings, NAV, or allocation |
+| `pipeline/00_engine.ipynb` | 公共引擎：标的、成本表、IS/OOS 日期、读价格、RSI 决策树、精确手续费、绩效指标 | 被其他文件调用 |
+| `pipeline/1_data/01_data_update.ipynb` | 可选：下载美股 ETF、ES3、A35 和 USD/SGD | `data/raw/etf_daily.csv`、`sti_daily.csv` |
+| `pipeline/2_signals/02_parameter_ensemble.ipynb` | V0 | `results/signals/ensemble_weights_history.csv` |
+| `pipeline/2_signals/03_sti_garch.ipynb` | 新加坡部分（ARCH 检验、模型选择、预测评估、回测） | `sti_weights_history.csv`、`results/tables/sti_*.csv` |
+| `pipeline/2_signals/05_risk_allocation.ipynb` | V1 和稳健性检验 | `risk_adjusted_weights.csv`、`risk_*.csv` |
+| `pipeline/2_signals/06_bsv_volatility_targeting.ipynb` | V2 和目标波动敏感性 | `v2_weights_history.csv` |
+| `pipeline/3_results/07_final_strategy.ipynb` | 最终策略历史回测、分散化、bootstrap | `results/tables/final_*.csv`、`results/figures/final_*.png` |
+| `pipeline/3_results/08_final_strategy_live.ipynb` | 10 月实盘模拟账本 | `final_live_*.csv` |
+| `portfolio_accounting.py` | 两个独立账户的记账：成交、现金、手续费、汇率 | 被 07、08 调用 |
+| `run_all.py` / `run_all.bat` / `run_all.command` | 一键运行和生成报告 | `results/Report.html` |
+| `tests/test_accounting.py` | 记账规则回归测试 | — |
 
-OOS performance measures the historical account's return over the OOS window, not a newly funded 90/10 portfolio in 2020. A small Singapore share at the end of historical OOS is therefore consistent with the chosen policy. October may use signals estimated from earlier data, but it begins with new cash and its performance must not be spliced onto the historical equity curve. `portfolio_accounting.py` centralizes the inception and tracking settings.
+**要引用的数字：** 最终策略的历史绩效看 `results/tables/final_metrics.csv`（`Report.html` 里也有），行名 `Final V2 + Singapore (initial 90/10; independent sleeves)`，注明 IS / OOS / OOS ex-2020。02、03、05、06 自己的表是研究诊断，日历、成本口径可能不同，不要和最终表混用。10 月实盘看 `final_live_summary.csv`，它是单独的账户，不能接在历史净值后面。
 
-## FX and valuation
+## 4. 关键假设
 
-USD/SGD is quoted as local SGD units per USD. Singapore securities and cash are held in SGD. Native ES3/A35 trades and fees are booked in SGD and do not repeatedly convert the whole account at each rebalance.
+**时间划分**（定义在 `00_engine`）
 
-USD amounts in the trade ledger use the most recent **strictly earlier** daily FX quote as a reporting reference. Columns include `fx_reference`, `fx_reference_date`, `notional_local`, and `cost_local`. This is not an assertion that an intraday FX trade occurred at that rate. Actual local-currency balances drive the ledger.
-
-At each date's closing valuation, SGD securities plus SGD cash are translated using the latest available closing FX. Local price marks can carry forward; their source dates are retained, and FX changes can affect USD value even while the security market has no new quote. These are date-based closing snapshots, not claims of simultaneous US/SGX closing auctions. Missing sessions are not independently certified as holidays; an absent or incomplete source is labeled and cannot trade. A carried quote at the end of the sample must not be presented as a newly confirmed close.
-
-## Periods and costs
-
-| Period | Start | End |
+| 区间 | 起 | 止 |
 |---|---|---|
 | IS | 2012-08-01 | 2019-12-31 |
 | OOS | 2020-01-01 | 2026-09-30 |
 | OOS ex-2020 | 2021-01-01 | 2026-09-30 |
-| Live tracking | 2026-10-01 | 2026-10-20, limited by available data |
+| 实盘模拟 | 2026-10-01 | 2026-10-20（以实际数据为准） |
 
-05/06 and the final account engine use shared date constants from 00. Signal histories extend into October for tracking; OOS statistics stop at September 30. Final 07 performance and bootstrap returns include the first period session by retaining the preceding close. Older standalone research tables retain their original metric slicing convention and should not be treated as identical account histories.
+策略和参数只依据 2026-09-30 及以前的结果确定。
 
-| Asset | One-way bps |
-|---|---:|
-| SPY | 0.5 |
-| QQQ | 1.5 |
-| TQQQ / BSV | 1 |
-| UVXY | 6 |
-| TECL | 35 |
-| SPXL | 16 |
-| SQQQ | 3 |
-| TECS | 15 |
-| ES3 / A35 | 10 |
+**账户规则**（`portfolio_accounting.py`）
 
-One basis point is 0.01%. Shared exact fee arithmetic solves costs from actual local trade notionals and after-fee target holdings. Entry costs are included, and there is no forced terminal liquidation. Final US and ES3 buy-and-hold comparators include entry fees and use valid source openings.
+1. 开始时一次性分配：90% 美元进美股账户，10% 按开始前最后一个汇率换成新元进新加坡账户。之后**不转账、不调回 90/10**，两边比例随涨跌漂移。
+2. 每个账户只在自己市场的有效开盘价成交，用前一个交易日（或更早）收盘得到的最新目标仓位，每天调回目标。
+3. 开盘价缺失就不成交。缺失的收盘价可以沿用旧价估值，但旧价不能用来成交。
+4. 新加坡的持仓、现金和手续费都用新元记账；估值时按当日收盘汇率换成美元。
+5. 历史账户（07）从 2012-08-01 连续运行，IS 和 OOS 是同一账户的两段，2020-01-01 不重置。10 月实盘（08）用 10 万美元重新开一个账户。
 
-Turnover includes both sides of a switch and is not divided by two. Because markets open at different times, final combined turnover divides daily reference-USD trade notionals by preceding total closing NAV, rather than a fictional simultaneous global opening NAV. Annualization uses 252 divided by the number of reported union-session observations. Standalone 03 research still reports ES3-leg turnover and uses its original weight-based fee approximation; it is distinct from the shared final/live account ledger.
+**交易成本**（单边，1 bp = 0.01%）
 
-## Main outputs
+| SPY | QQQ | TQQQ | BSV | UVXY | TECL | SPXL | SQQQ | TECS | ES3 | A35 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0.5 | 1.5 | 1 | 1 | 6 | 35 | 16 | 3 | 15 | 10 | 10 |
 
-- `results/Report.html`: instructor-facing report; distribute `results` to retain CSV links.
-- `results/tables/final_live_daily_positions.csv`: cash, holdings, account shares, source dates, statuses, and equity.
-- `results/tables/final_live_trades.csv`: valid-source modeled fills, signal dates, local and USD-reference costs.
-- `results/tables/final_live_current_holdings.csv`: current holdings including separate cash accounts.
-- `results/tables/final_live_summary.csv`: simulated window performance and latest quote status.
-- `results/signals/final_live_next_open_target.csv`: within-account targets for subsequent valid local sessions.
-- `results/tables/final_daily_accounts.csv`, `final_historical_trades.csv`: full historical independent-account records.
-- `results/figures/final_sleeve_shares.png`: drifting US/Singapore shares.
+手续费按实际成交金额精确计算（`00_engine.rebalance_exact`）。所有价格是除权复权价，允许零碎股。换手率计算买卖两边，不除以 2。
 
-The submission retains only the current strategy, required price snapshots, reproducible results, dependencies, and tests. Legacy notebooks, fixed-weight helper 04, obsolete `live_oct_*` outputs, internal audit notes, the old baseline Word guide, and empty placeholder directories have been removed. Execution logs and caches are generated locally when needed. `report/contribution.md` is a course-related template that the team must complete before submission.
+## 5. 局限
 
-## Interpretation limits
+- 这是基于日线价格的模拟，不是真实券商成交。没有模拟日内换汇、结算、最小交易单位、最低佣金、冲击成本和融资。
+- 缺数据的日子没有逐一核对是否真的休市；最后一天如果用的是沿用价，不代表新的收盘价。
+- ES3 在 2012–2017 年零收益日较多（报价精度较粗）；A35 早年成交清淡，有可疑报价。用到次日价格的 A35 清洗规则默认关闭，可疑报价作为数据局限保留。
+- 策略结构和参数是在看过历史结果后选定的，存在选择偏差，即使 OOS 日期划分清楚也要单独说明。
+- 新加坡账户不调回 10%，比例会随时间被美股稀释，总组合的结果接近纯 V2。
 
-This is a daily-price simulation, not actual broker trading. Intraday FX fills, settlement, board lots, minimum commissions, liquidity impact, and financing are not modeled. There is no exchange-calendar certification of absent source days. No order executes without an original valid opening quote.
-
-The retrospective A35 quote filter remains disabled because it uses following-day information. Suspicious raw quotes remain a data-quality limitation rather than being silently rewritten. Model-selection bias and the information used to select the overall strategy must be disclosed independently of OOS date boundaries.
+`report/contribution.md` 是分工表模板，提交前每位组员填写自己的一行。

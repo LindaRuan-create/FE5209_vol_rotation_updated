@@ -1,9 +1,9 @@
 ﻿ticker,sleeve,signal_date,target_within_sleeve,current_total_weight,current_sleeve_share,indicative_total_weight,execution_rule
-TQQQ,US,2026-10-16,0.5463699918312546,0.4839310951901057,0.8966337073094531,0.4898937513382934,Next valid local source opening; refresh prior-known target; no sleeve transfers
-UVXY,US,2026-10-16,0.0,0.0,0.8966337073094531,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-TECL,US,2026-10-16,0.0,0.0,0.8966337073094531,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-SPXL,US,2026-10-16,0.0,0.0,0.8966337073094531,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-TECS,US,2026-10-16,0.0,0.0,0.8966337073094531,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-BSV,US,2026-10-16,0.4536300081687454,0.41270261211934745,0.8966337073094531,0.4067399559711597,Next valid local source opening; refresh prior-known target; no sleeve transfers
-ES3,Singapore,2026-10-15,0.692423,0.07139708173808051,0.1033662926905468,0.07157319848366649,Next valid local source opening; refresh prior-known target; no sleeve transfers
-A35,Singapore,2026-10-15,0.307577,0.03196921095246629,0.1033662926905468,0.03179309420688031,Next valid local source opening; refresh prior-known target; no sleeve transfers
+TQQQ,US,2026-10-16,0.5463699918312547,0.48393109733720663,0.8966337112876293,0.48989375351184955,Next valid local source opening; refresh prior-known target; no sleeve transfers
+UVXY,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
+TECL,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
+SPXL,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
+TECS,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
+BSV,US,2026-10-16,0.4536300081687453,0.4127026139504225,0.8966337112876293,0.4067399577757797,Next valid local source opening; refresh prior-known target; no sleeve transfers
+ES3,Singapore,2026-10-15,0.692423,0.07139707899027796,0.1033662887123707,0.07157319572908587,Next valid local source opening; refresh prior-known target; no sleeve transfers
+A35,Singapore,2026-10-15,0.307577,0.03196920972209276,0.1033662887123707,0.031793092983284844,Next valid local source opening; refresh prior-known target; no sleeve transfers

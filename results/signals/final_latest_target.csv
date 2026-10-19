@@ -1,9 +1,0 @@
-﻿ticker,sleeve,signal_date,target_within_sleeve,current_total_weight,current_sleeve_share,indicative_total_weight,execution_rule
-TQQQ,US,2026-10-16,0.5463699918312546,0.537961467899386,0.9967418712012618,0.5445898480261028,Next valid local source opening; refresh prior-known target; no sleeve transfers
-UVXY,US,2026-10-16,0.0,0.0,0.9967418712012618,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-TECL,US,2026-10-16,0.0,0.0,0.9967418712012618,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-SPXL,US,2026-10-16,0.0,0.0,0.9967418712012618,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-TECS,US,2026-10-16,0.0,0.0,0.9967418712012618,0.0,Next valid local source opening; refresh prior-known target; no sleeve transfers
-BSV,US,2026-10-16,0.4536300081687454,0.45878040330187575,0.9967418712012618,0.45215202317515896,Next valid local source opening; refresh prior-known target; no sleeve transfers
-ES3,Singapore,2026-10-15,0.692423,0.0022504520777688994,0.0032581287987382547,0.0022560033172087384,Next valid local source opening; refresh prior-known target; no sleeve transfers
-A35,Singapore,2026-10-15,0.307577,0.0010076767209693555,0.0032581287987382547,0.001002125481529516,Next valid local source opening; refresh prior-known target; no sleeve transfers

@@ -1,4 +1,4 @@
-"""Independent market sleeves: initial funding only, native-session execution, USD valuation.
+"""Independent market sleeves: initial funding (optionally a threshold reset), native-session execution, USD valuation.
 
 US cash stays in USD. Singapore is funded in SGD once using the last FX quote
 available before the start. Singapore trades and fees are booked in SGD; USD
@@ -132,45 +132,70 @@ TRADE_COLUMNS = ['exec_date', 'signal_date', 'ticker', 'sleeve', 'side', 'shares
                  'fx_reference', 'fx_reference_date', 'execution_quote_date', 'note']
 
 
-def run_sleeve(market, weights, timeline, capital, rebalance='daily'):
-    """Self-financing local-currency ledger; only genuine source openings can trade.
+class _SleeveRunner:
+    """One sleeve's ledger, advanced one date at a time (same maths as before).
 
-    A missing opening blocks sleeve rebalancing for that date. Latest prior target
-    replaces any older unexecuted target. There are no cross-sleeve transfers.
+    `step(i, d, cash_adjust)` optionally adds a cross-sleeve transfer (local
+    currency) to cash immediately before that date's rebalance.
     """
-    if rebalance not in {'daily', 'on_change', 'buy_hold'}:
-        raise ValueError('Unknown rebalance mode.')
-    _check_dates(weights, 'Weights')
-    names = list(weights.columns)
-    if not set(names).issubset(market.opens.columns):
-        raise ValueError('Weight columns must have market prices.')
-    if capital <= 0:
-        raise ValueError('Capital must be positive.')
-    initial_date = timeline[0]
-    fx_date, funding_fx = _asof(market.fx, initial_date)
-    cash = capital * funding_fx
-    qty = np.zeros(len(names)); rates = np.array([ENGINE['ONE_WAY_BPS'][t] for t in names]) / 1e4
-    previous_executed = None
-    closes = market.closes[names].where(lambda x: x > 0)
-    marks = closes.reindex(closes.index.union(timeline)).sort_index().ffill().reindex(timeline)
-    if marks.isna().any().any():
-        raise ValueError(f'{market.name}: missing initial valuation price.')
-    price_dates = pd.DataFrame(index=closes.index, columns=names)
-    for t in names:
-        price_dates[t] = pd.Series(closes.index, index=closes.index).where(closes[t].notna())
-    price_dates = price_dates.reindex(price_dates.index.union(timeline)).sort_index().ffill().reindex(timeline)
-    rows, trades = [], []
-    epsilon = capital * 1e-12
-    for i, d in enumerate(timeline):
+
+    def __init__(self, market, weights, timeline, capital, rebalance):
+        if rebalance not in {'daily', 'on_change', 'buy_hold'}:
+            raise ValueError('Unknown rebalance mode.')
+        _check_dates(weights, 'Weights')
+        names = list(weights.columns)
+        if not set(names).issubset(market.opens.columns):
+            raise ValueError('Weight columns must have market prices.')
+        if capital <= 0:
+            raise ValueError('Capital must be positive.')
+        self.market, self.weights, self.timeline = market, weights, timeline
+        self.names, self.capital, self.rebalance = names, capital, rebalance
+        fx_date, funding_fx = _asof(market.fx, timeline[0])
+        self.funding_fx, self.funding_fx_date = funding_fx, fx_date
+        self.cash = capital * funding_fx
+        self.qty = np.zeros(len(names))
+        self.rates = np.array([ENGINE['ONE_WAY_BPS'][t] for t in names]) / 1e4
+        self.previous_executed = None
+        closes = market.closes[names].where(lambda x: x > 0)
+        self.marks = closes.reindex(closes.index.union(timeline)).sort_index().ffill().reindex(timeline)
+        if self.marks.isna().any().any():
+            raise ValueError(f'{market.name}: missing initial valuation price.')
+        price_dates = pd.DataFrame(index=closes.index, columns=names)
+        for t in names:
+            price_dates[t] = pd.Series(closes.index, index=closes.index).where(closes[t].notna())
+        self.price_dates = price_dates.reindex(price_dates.index.union(timeline)).sort_index().ffill().reindex(timeline)
+        self.rows, self.trades = [], []
+        self.epsilon = capital * 1e-12
+
+    def _open_prices(self, d):
+        if d not in self.market.opens.index:
+            return None
+        px = self.market.opens.loc[d, self.names].to_numpy(float)
+        return px if (np.isfinite(px).all() and (px > 0).all()) else None
+
+    def ready(self, i, d):
+        """True when a trade (and therefore a transfer) can happen on d."""
+        if i == 0 or self._open_prices(d) is None:
+            return False
+        return self.weights.index.searchsorted(d, side='left') - 1 >= 0
+
+    def open_value(self, d):
+        """Local-currency account value at the source opening of d."""
+        px = self._open_prices(d)
+        return None if px is None else float(self.cash + (self.qty * px).sum())
+
+    def step(self, i, d, cash_adjust=0.0):
+        market, names, weights = self.market, self.names, self.weights
         total_cost_usd = turnover = notional_usd = 0.0
         signal_date = pd.NaT
+        px_all = self._open_prices(d) if i > 0 else None
         if i == 0:
             status = 'Initial funding; no trade'
         elif d not in market.opens.index:
             status = 'No source session; holdings unchanged; carried valuation'
         else:
             px = market.opens.loc[d, names].to_numpy(float)
-            valid_open = np.isfinite(px).all() and (px > 0).all()
+            valid_open = px_all is not None
             pos = weights.index.searchsorted(d, side='left') - 1
             if not valid_open:
                 status = 'Incomplete opening quote; no trade; source date shown'
@@ -181,60 +206,85 @@ def run_sleeve(market, weights, timeline, capital, rebalance='daily'):
                 w = weights.iloc[pos].to_numpy(float)
                 if not np.isfinite(w).all() or (w < -1e-10).any() or w.sum() > 1 + 1e-8:
                     raise ValueError(f'{market.name}: invalid signal at {signal_date}.')
-                execute = previous_executed is None or rebalance == 'daily' or (
-                    rebalance == 'on_change' and not np.allclose(w, previous_executed, rtol=0, atol=1e-12))
+                transfer = abs(cash_adjust) > 0
+                execute = transfer or self.previous_executed is None or self.rebalance == 'daily' or (
+                    self.rebalance == 'on_change' and not np.allclose(w, self.previous_executed, rtol=0, atol=1e-12))
                 if not execute:
                     status = 'Hold; no target-triggered trade'
                 else:
                     ref_date, ref_fx = _asof(market.fx, d, strict=True)
-                    current = qty * px
-                    value = cash + current.sum()
-                    delta, costs = ENGINE['rebalance_exact'](value, current, w, rates)
+                    self.cash += cash_adjust  # cross-sleeve transfer, settled before rebalancing
+                    current = self.qty * px
+                    value = self.cash + current.sum()
+                    delta, costs = ENGINE['rebalance_exact'](value, current, w, self.rates)
                     target = current + delta
-                    qty = target / px
-                    cash = float(value - target.sum() - costs.sum())
-                    if cash < -max(epsilon, 1e-8):
+                    self.qty = target / px
+                    self.cash = float(value - target.sum() - costs.sum())
+                    if self.cash < -max(self.epsilon, 1e-8):
                         raise AssertionError('A sleeve cannot spend another sleeve\'s cash.')
-                    cash = max(cash, 0.0)
-                    for j in np.flatnonzero(np.abs(delta) > epsilon):
-                        trades.append(dict(exec_date=d, signal_date=signal_date, ticker=names[j],
+                    self.cash = max(self.cash, 0.0)
+                    for j in np.flatnonzero(np.abs(delta) > self.epsilon):
+                        self.trades.append(dict(exec_date=d, signal_date=signal_date, ticker=names[j],
                             sleeve=market.name, side='BUY' if delta[j] > 0 else 'SELL',
                             shares=abs(delta[j]) / px[j], price_local=px[j], price_usd=px[j] / ref_fx,
                             currency=market.currency, notional_local=abs(delta[j]), notional_usd=abs(delta[j]) / ref_fx,
-                            cost_local=costs[j], cost_usd=costs[j] / ref_fx, cost_bps=rates[j] * 1e4,
+                            cost_local=costs[j], cost_usd=costs[j] / ref_fx, cost_bps=self.rates[j] * 1e4,
                             weight_before=current[j] / value, weight_after=w[j], fx_reference=ref_fx,
                             fx_reference_date=ref_date, execution_quote_date=d,
                             note='SGD trade; USD amounts use prior FX for reporting only' if market.currency=='SGD' else ''))
                     total_cost_usd = costs.sum() / ref_fx
                     notional_usd = np.abs(delta).sum() / ref_fx
                     turnover = np.abs(delta).sum() / value
-                    previous_executed = w.copy()
-                    status = 'Rebalanced at source opening' if notional_usd > epsilon else 'At target; no material trade'
+                    self.previous_executed = w.copy()
+                    status = 'Rebalanced at source opening' if notional_usd > self.epsilon else 'At target; no material trade'
+                    if transfer:
+                        status += '; incl. cross-sleeve transfer'
         mark_fx_date, mark_fx = _asof(market.fx, d)
-        values = qty * marks.loc[d].to_numpy(float)
-        nav_local = cash + values.sum()
-        quote_date = min(pd.Timestamp(x) for x in price_dates.loc[d])
-        row = dict(date=d, equity=nav_local / mark_fx, cash=cash / mark_fx, cash_local=cash,
+        values = self.qty * self.marks.loc[d].to_numpy(float)
+        nav_local = self.cash + values.sum()
+        quote_date = min(pd.Timestamp(x) for x in self.price_dates.loc[d])
+        row = dict(date=d, equity=nav_local / mark_fx, cash=self.cash / mark_fx, cash_local=self.cash,
                    equity_local=nav_local, quote_date=quote_date, fx=mark_fx, fx_date=mark_fx_date,
                    status=status, turnover=turnover, cost_usd=total_cost_usd,
                    traded_notional_usd=notional_usd, signal_date=signal_date)
-        for j,t in enumerate(names):
-            row[t+'_shares'] = qty[j]
+        for j, t in enumerate(names):
+            row[t+'_shares'] = self.qty[j]
             row[t+'_value'] = values[j] / mark_fx
             row[t+'_pct'] = values[j] / nav_local
-            row[t+'_price_date'] = price_dates.loc[d,t]
-        rows.append(row)
-    daily = pd.DataFrame(rows).set_index('date')
-    trade_frame = pd.DataFrame(trades, columns=TRADE_COLUMNS)
-    return {'daily': daily, 'trades': trade_frame, 'market': market, 'weights': weights,
-            'capital': capital, 'funding_fx': funding_fx, 'funding_fx_date': fx_date}
+            row[t+'_price_date'] = self.price_dates.loc[d, t]
+        self.rows.append(row)
+        return row['equity']
+
+    def result(self):
+        daily = pd.DataFrame(self.rows).set_index('date')
+        trade_frame = pd.DataFrame(self.trades, columns=TRADE_COLUMNS)
+        return {'daily': daily, 'trades': trade_frame, 'market': self.market, 'weights': self.weights,
+                'capital': self.capital, 'funding_fx': self.funding_fx, 'funding_fx_date': self.funding_fx_date}
 
 
-def combine_results(us, sg, capital):
-    """Add sleeve account values; never rebalance or transfer their funding."""
+def run_sleeve(market, weights, timeline, capital, rebalance='daily'):
+    """Self-financing local-currency ledger; only genuine source openings can trade.
+
+    A missing opening blocks sleeve rebalancing for that date. Latest prior target
+    replaces any older unexecuted target. A single sleeve never transfers cash;
+    cross-sleeve transfers exist only inside run_portfolio(rebalance_band=...).
+    """
+    runner = _SleeveRunner(market, weights, timeline, capital, rebalance)
+    for i, d in enumerate(timeline):
+        runner.step(i, d)
+    return runner.result()
+
+
+TRANSFER_COLUMNS = ['exec_date', 'direction', 'usd_to_sg', 'sgd_to_sg', 'fx_reference', 'fx_cost_usd',
+                    'sg_share_flagged', 'flag_date', 'sg_share_at_open_before', 'target_sg_share']
+
+
+def combine_results(us, sg, capital, transfers=None, band=None):
+    """Add sleeve account values. Sleeve funding is only ever moved by `transfers`."""
     u, s = us['daily'], sg['daily']
     if not u.index.equals(s.index):
         raise ValueError('Sleeve reports need the same valuation dates.')
+    transfers = pd.DataFrame(transfers or [], columns=TRANSFER_COLUMNS)
     daily = pd.DataFrame(index=u.index)
     daily['equity'] = u.equity + s.equity
     daily['cash'] = u.cash + s.cash
@@ -256,7 +306,11 @@ def combine_results(us, sg, capital):
             daily[t+'_shares'] = result['daily'][t+'_shares']
             daily[t+'_value'] = result['daily'][t+'_value']
             daily[t+'_pct'] = daily[t+'_value'] / daily.equity
-    daily['cost_usd'] = u.cost_usd + s.cost_usd
+    fx_cost = transfers.groupby('exec_date').fx_cost_usd.sum().astype(float).reindex(daily.index).fillna(0.0)
+    moved = transfers.groupby('exec_date').usd_to_sg.sum().astype(float).reindex(daily.index).fillna(0.0)
+    daily['transfer_to_SG_usd'] = moved
+    daily['transfer_cost_usd'] = fx_cost
+    daily['cost_usd'] = u.cost_usd + s.cost_usd + fx_cost
     daily['traded_notional_usd'] = u.traded_notional_usd + s.traded_notional_usd
     # Different exchanges open at different times. Use prior total closing NAV,
     # not a fictional simultaneous global opening NAV, as turnover denominator.
@@ -264,17 +318,59 @@ def combine_results(us, sg, capital):
     daily.loc[daily.index[0], 'turnover'] = 0.0
     trades = pd.concat([us['trades'],sg['trades']],ignore_index=True).sort_values(
         ['exec_date','sleeve','ticker']).reset_index(drop=True)
-    return {'daily': daily, 'trades': trades, 'us': us, 'sg': sg, 'capital': capital}
+    return {'daily': daily, 'trades': trades, 'transfers': transfers, 'band': band,
+            'us': us, 'sg': sg, 'capital': capital}
 
 
 def run_portfolio(us, sg, us_weights, sg_weights, start, end=None, capital=100000.0,
-                  initial_sg_share=INITIAL_SG_SHARE, rebalance='daily'):
+                  initial_sg_share=INITIAL_SG_SHARE, rebalance='daily',
+                  rebalance_band=None, fx_bps=0.0):
+    """Two independent sleeves, funded initial_sg_share / (1 - initial_sg_share).
+
+    rebalance_band=None : no cross-sleeve transfer ever (sleeve shares drift).
+    rebalance_band=0.01 : threshold rule. At a close, if |SG share - initial_sg_share| > band
+        a flag is set (kept until executed). On the first later date on which BOTH
+        sleeves have a valid opening and a known signal, the SG account is reset to
+        initial_sg_share of total opening value (cash moved between the accounts,
+        converted at the prior FX reference), then each sleeve rebalances to its own
+        targets. fx_bps is a one-way conversion cost on the amount moved.
+    """
     if not 0 < initial_sg_share < 1:
         raise ValueError('Both initial sleeve shares must be positive.')
+    if rebalance_band is not None and rebalance_band <= 0:
+        raise ValueError('rebalance_band must be positive or None.')
     timeline = common_timeline((us,sg),start,end)
-    u = run_sleeve(us,us_weights,timeline,capital*(1-initial_sg_share),rebalance)
-    s = run_sleeve(sg,sg_weights,timeline,capital*initial_sg_share,rebalance)
-    return combine_results(u,s,capital)
+    if rebalance_band is None:
+        u = run_sleeve(us,us_weights,timeline,capital*(1-initial_sg_share),rebalance)
+        s = run_sleeve(sg,sg_weights,timeline,capital*initial_sg_share,rebalance)
+        return combine_results(u,s,capital)
+    ru = _SleeveRunner(us, us_weights, timeline, capital*(1-initial_sg_share), rebalance)
+    rs = _SleeveRunner(sg, sg_weights, timeline, capital*initial_sg_share, rebalance)
+    pending, flag_date, flag_share, transfers = False, None, np.nan, []
+    for i, d in enumerate(timeline):
+        adj_u = adj_s = 0.0
+        if pending and ru.ready(i, d) and rs.ready(i, d):
+            ref_date, ref_fx = _asof(sg.fx, d, strict=True)
+            v_us = ru.open_value(d)
+            v_sg = rs.open_value(d) / ref_fx
+            x = initial_sg_share * (v_us + v_sg) - v_sg      # USD that must move into SG (<0: out of SG)
+            if abs(x) > capital * 1e-12:
+                cost = abs(x) * fx_bps / 1e4
+                if x > 0:
+                    adj_u, adj_s = -x, (x - cost) * ref_fx
+                else:
+                    adj_u, adj_s = -x - cost, x * ref_fx
+                transfers.append(dict(exec_date=d, direction='US->SG' if x > 0 else 'SG->US',
+                    usd_to_sg=x, sgd_to_sg=x * ref_fx, fx_reference=ref_fx, fx_cost_usd=cost,
+                    sg_share_flagged=flag_share, flag_date=flag_date,
+                    sg_share_at_open_before=v_sg / (v_us + v_sg), target_sg_share=initial_sg_share))
+            pending = False
+        eu = ru.step(i, d, adj_u)
+        es = rs.step(i, d, adj_s)
+        share = es / (eu + es)
+        if not pending and abs(share - initial_sg_share) > rebalance_band:
+            pending, flag_date, flag_share = True, d, share
+    return combine_results(ru.result(), rs.result(), capital, transfers, rebalance_band)
 
 
 def window_equity(eq, start, end):
@@ -306,7 +402,7 @@ def latest_targets(result):
             rows.append(dict(ticker=t,sleeve=r['market'].name,signal_date=signal_date,
                 target_within_sleeve=w,current_total_weight=result['daily'][t+'_pct'].iloc[-1],
                 current_sleeve_share=sleeve_share,indicative_total_weight=sleeve_share*w,
-                execution_rule='Next valid local source opening; refresh prior-known target; no sleeve transfers'))
+                execution_rule=('Next valid local source opening; refresh prior-known target; ' + (f"sleeve reset to target only if share leaves the +/-{100*result['band']:.1f}pt band" if result.get('band') else 'no sleeve transfers'))))
     return pd.DataFrame(rows).set_index('ticker')
 
 

@@ -40,6 +40,8 @@ def report(view_only=False):
         ('Daily equity and positions since live tracking began', 'tables/final_live_daily_positions.csv'),
         ('Submission reference: historical IS / OOS metrics', 'tables/final_metrics.csv'),
     ]
+    if (ROOT / 'results' / 'tables' / 'cpi_overlay_metrics.csv').is_file():
+        files.append(('CPI overlay: with and without (the final strategy includes the overlay)', 'tables/cpi_overlay_metrics.csv'))
     for title, relative in files:
         p = ROOT / 'results' / relative
         rows = read(p)
@@ -85,6 +87,9 @@ def main():
         stages = (['01_data_update'] if args.update_data else []) + [
             '03_sti_garch', '02_parameter_ensemble', '05_risk_allocation',
             '06_bsv_volatility_targeting', '07_final_strategy', '08_final_strategy_live']
+        if not (ROOT / 'data' / 'raw' / 'cpi_yoy.csv').is_file():
+            sys.exit('data/raw/cpi_yoy.csv is missing: the CPI overlay is part of the final strategy (07, 08, 09).')
+        stages.append('09_cpi_overlay')              # with / without comparison and the evidence cells; 07 and 08 load its rule
         for stage in stages:
             print(f'Run {stage} …', flush=True)
             with (logs / f'{stage}.log').open('w', encoding='utf-8') as log:

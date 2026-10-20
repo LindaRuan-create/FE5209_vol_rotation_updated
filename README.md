@@ -1,105 +1,111 @@
 # FE5209 Volatility Rotation
 
-NUS RMI · FE5209 Financial Econometrics 小组项目（ReReRe）
+NUS RMI · FE5209 Financial Econometrics group project (ReReRe)
 
-## 1. 策略一句话
+## 1. The strategy in one paragraph
 
-每天美股收盘后，用 SPY 120 日均线判断大方向，再看各 ETF 的 RSI，按决策树选出下一交易日持有的 ETF，T+1 开盘执行。
+Every day after the US close, the SPY 120-day moving average gives the broad direction, then each ETF's RSI is run through a decision tree to pick the ETF to hold on the next trading day. Trades are executed at the T+1 open.
 
-**最终策略 = 美股 V2（目标波动 30%）+ 新加坡部分（ES3 GARCH + A35）**，2012-08-01 起按 **90% / 10% 一次性**分配资金，之后两个账户各自运作、互不转账。
+**Final strategy = US V2 (30% target volatility) + CPI overlay (US sleeve) + Singapore sleeve (ES3 GARCH + A35).** From 2012-08-01 the capital is split **90% / 10%**; the two accounts then run independently, and the Singapore share is reset to 10% only when it drifts more than **±1 percentage point** away from 10% (threshold rule, see Account rules).
 
-| 层 | 文件 | 做什么 |
+| Layer | File | What it does |
 |---|---|---|
-| V0 参数投票 | `02_parameter_ensemble` | 7 个参数共 6,336 组，每组每天投 1 票，得票比例 = 仓位 |
-| V1 按波动率分配 | `05_risk_allocation` | V0 仓位 ÷ 各 ETF 过去 60 日波动率（α = 1）后归一 |
-| V2 目标波动 30% | `06_bsv_volatility_targeting` | V1 组合预测波动超过 30% 时等比例缩小风险资产，多出的钱放 BSV |
-| 新加坡部分 | `03_sti_garch` | GARCH 预测 ES3 明日波动，ES3 仓位 = min(目标波动 / 预测波动, 1)，其余持有 A35 |
+| V0 parameter vote | `02_parameter_ensemble` | 7 parameters, 6,336 combinations in total; each combination casts 1 vote per day, and the share of votes = the position weight |
+| V1 volatility-based allocation | `05_risk_allocation` | V0 weight ÷ each ETF's past 60-day volatility (α = 1), then normalised |
+| V2 30% target volatility | `06_bsv_volatility_targeting` | When the V1 portfolio's forecast volatility exceeds 30%, risky assets are scaled down proportionally and the excess is parked in BSV |
+| CPI overlay (US sleeve) | `09_cpi_overlay` | After a hot CPI release (actual YoY above forecast) in a regime where the market reacts to CPI, the TQQQ target is swapped into UVXY for 3 trading days (opens of days 1–3) and the account is rebalanced back to the unhedged V2 target at the closing price of day 3 |
+| Singapore sleeve | `03_sti_garch` | GARCH forecasts ES3's volatility for tomorrow; ES3 weight = min(target volatility / forecast volatility, 1), and the rest is held in A35 |
 
-标的：信号用 SPY、QQQ、SQQQ；美股交易 TQQQ、UVXY、TECL、SPXL、TECS、BSV；新加坡交易 ES3.SI（SPDR STI ETF）和 A35.SI（ABF Singapore Bond Index Fund）。
+Instruments: SPY, QQQ and SQQQ are used for signals; the US sleeve trades TQQQ, UVXY, TECL, SPXL, TECS and BSV; the Singapore sleeve trades ES3.SI (SPDR STI ETF) and A35.SI (ABF Singapore Bond Index Fund).
 
-## 2. 怎么运行
+## 2. How to run
 
-**只看结果：** 用浏览器打开 `results/Report.html`，不需要装 Python。报告要和 `results/` 文件夹放在一起，里面的 CSV 下载链接才有效。
+**Results only:** open `results/Report.html` in a browser; no Python needed. Keep the report next to the `results/` folder, otherwise the CSV download links inside it will not work.
 
-**重新计算（需要 Python 3.10+，第一次需要联网装依赖）：**
+**Recompute (Python 3.10+; the first run needs internet to install dependencies):**
 
-- Windows：双击 `run_all.bat`
-- macOS：双击 `run_all.command`
-- 命令行：
+- Windows: double-click `run_all.bat`
+- macOS: double-click `run_all.command`
+- Command line:
 
 ```bash
 python -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt      # Windows 用 .venv\Scripts\python
-.venv/bin/python run_all.py                  # 用本地数据重算全部结果，生成 results/Report.html
-.venv/bin/python run_all.py --update-data    # 先下载最新价格（会备份旧文件），再重算
-python run_all.py --view-only                # 不重算，只用现有 CSV 生成报告
-.venv/bin/python -m unittest discover -s tests   # 记账规则测试
+.venv/bin/python -m pip install -r requirements.txt      # on Windows use .venv\Scripts\python
+.venv/bin/python run_all.py                  # recompute everything from local data and build results/Report.html
+.venv/bin/python run_all.py --update-data    # download the latest prices first (old files are backed up), then recompute
+python run_all.py --view-only                # no recomputation; build the report from the existing CSVs
+.venv/bin/python -m unittest discover -s tests   # accounting rule tests
 ```
 
-`run_all.py` 按 **03 → 02 → 05 → 06 → 07 → 08** 的顺序运行，每一步的日志写在 `results/logs/`，任何一步出错就停止。6,336 组投票和 GARCH 每月重估比较慢，完整跑一次需要几分钟。
+`run_all.py` runs the stages in the order **03 → 02 → 05 → 06 → 07 → 08 → 09**. `data/raw/cpi_yoy.csv` is required: 07 and 08 load the CPI rule defined in 09, and 09 adds the with / without comparison tables. Each step's log is written to `results/logs/`, and the run stops at the first step that fails. The 6,336-combination vote and the monthly GARCH re-estimation are slow, so a full run takes a few minutes.
 
-也可以在 Jupyter / PyCharm 里逐个打开 notebook，Restart Kernel 后 Run All，顺序同上。`.venv` 和机器绑定，换电脑要重新建，不要拷贝。
+You can also open the notebooks one by one in Jupyter / PyCharm and use Restart Kernel → Run All, in the same order. `.venv` is tied to the machine; recreate it on a new computer instead of copying it.
 
-## 3. 文件和数据流
+## 3. Files and data flow
 
 ```text
-data/raw/etf_daily.csv ─┬─> 02 V0 投票 ─> 05 V1 ─> 06 V2 ─┐
-                        │                                  ├─> 07 历史回测 (2012-08 ~ 2026-09-30)
-data/raw/sti_daily.csv ─┴─> 03 新加坡 GARCH ───────────────┤
-                                                           └─> 08 实盘模拟 (2026-10-01 ~ 10-20)
+data/raw/etf_daily.csv ─┬─> 02 V0 vote ─> 05 V1 ─> 06 V2 ─┐
+                        │                                  ├─> 07 historical backtest (2012-08 ~ 2026-09-30)
+data/raw/sti_daily.csv ─┴─> 03 Singapore GARCH ────────────┤
+                                                           └─> 08 live simulation (2026-10-01 ~ 10-20)
 ```
 
-| 文件 | 作用 | 主要输出 |
+| File | Purpose | Main outputs |
 |---|---|---|
-| `pipeline/00_engine.ipynb` | 公共引擎：标的、成本表、IS/OOS 日期、读价格、RSI 决策树、精确手续费、绩效指标 | 被其他文件调用 |
-| `pipeline/1_data/01_data_update.ipynb` | 可选：下载美股 ETF、ES3、A35 和 USD/SGD | `data/raw/etf_daily.csv`、`sti_daily.csv` |
+| `pipeline/00_engine.ipynb` | Shared engine: instruments, cost table, IS/OOS dates, price loading, RSI decision tree, exact fees, performance metrics | Imported by the other files |
+| `pipeline/1_data/01_data_update.ipynb` | Optional: download US ETFs, ES3, A35 and USD/SGD | `data/raw/etf_daily.csv`, `sti_daily.csv` |
 | `pipeline/2_signals/02_parameter_ensemble.ipynb` | V0 | `results/signals/ensemble_weights_history.csv` |
-| `pipeline/2_signals/03_sti_garch.ipynb` | 新加坡部分（ARCH 检验、模型选择、预测评估、回测） | `sti_weights_history.csv`、`results/tables/sti_*.csv` |
-| `pipeline/2_signals/05_risk_allocation.ipynb` | V1 和稳健性检验 | `risk_adjusted_weights.csv`、`risk_*.csv` |
-| `pipeline/2_signals/06_bsv_volatility_targeting.ipynb` | V2 和目标波动敏感性 | `v2_weights_history.csv` |
-| `pipeline/3_results/07_final_strategy.ipynb` | 最终策略历史回测、分散化、bootstrap | `results/tables/final_*.csv`、`results/figures/final_*.png` |
-| `pipeline/3_results/08_final_strategy_live.ipynb` | 10 月实盘模拟账本 | `final_live_*.csv` |
-| `portfolio_accounting.py` | 两个独立账户的记账：成交、现金、手续费、汇率 | 被 07、08 调用 |
-| `run_all.py` / `run_all.bat` / `run_all.command` | 一键运行和生成报告 | `results/Report.html` |
-| `tests/test_accounting.py` | 记账规则回归测试 | — |
+| `pipeline/2_signals/03_sti_garch.ipynb` | Singapore sleeve (ARCH test, model selection, forecast evaluation, backtest) | `sti_weights_history.csv`, `results/tables/sti_*.csv` |
+| `pipeline/2_signals/05_risk_allocation.ipynb` | V1 and robustness checks | `risk_adjusted_weights.csv`, `risk_*.csv` |
+| `pipeline/2_signals/06_bsv_volatility_targeting.ipynb` | V2 and target-volatility sensitivity | `v2_weights_history.csv` |
+| `pipeline/3_results/07_final_strategy.ipynb` | Historical backtest of the final strategy, diversification, bootstrap | `results/tables/final_*.csv`, `results/figures/final_*.png` |
+| `pipeline/3_results/08_final_strategy_live.ipynb` | October live-simulation ledger | `final_live_*.csv` |
+| `pipeline/2_signals/09_cpi_overlay.ipynb` | CPI overlay rule (loaded by 07 and 08), with / without comparison, and two optional evidence cells (how the switch and the hedge settings were set; off by default) | `v2_cpi_overlay_weights_history.csv`, `cpi_overlay_*.csv` |
+| `portfolio_accounting.py` | Bookkeeping for the two independent accounts: trades, cash, fees, FX; plus an optional "rebalance back at the closing price on specified dates only" (used for the CPI hedge exit) | Imported by 07, 08, 09 |
+| `data/raw/cpi_yoy.csv` | Forecast and actual CPI year-over-year (maintained by hand; add one row after each release) | 09 |
+| `run_all.py` / `run_all.bat` / `run_all.command` | One-click run and report generation | `results/Report.html` |
+| `tests/test_accounting.py` | Regression tests for the accounting rules | — |
+| `tests/test_cpi_overlay.py` | Tests for the CPI overlay and the close-price exit | — |
 
-**要引用的数字：** 最终策略的历史绩效看 `results/tables/final_metrics.csv`（`Report.html` 里也有），行名 `Final V2 + Singapore (initial 90/10; independent sleeves)`，注明 IS / OOS / OOS ex-2020。02、03、05、06 自己的表是研究诊断，日历、成本口径可能不同，不要和最终表混用。10 月实盘看 `final_live_summary.csv`，它是单独的账户，不能接在历史净值后面。
+**Numbers to quote:** for the final strategy's historical performance use `results/tables/final_metrics.csv` (also shown in `Report.html`), the row named `Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold)` (the row `V2 + Singapore ..., no CPI overlay` is the same strategy without the overlay, for comparison), and state IS / OOS / OOS ex-2020. The tables from 02, 03, 05 and 06 are research diagnostics; their calendars and cost conventions may differ, so do not mix them with the final table. For October live results use `final_live_summary.csv`; it is a separate account and must not be chained onto the historical equity curve.
 
-## 4. 关键假设
+## 4. Key assumptions
 
-**时间划分**（定义在 `00_engine`）
+**Time split** (defined in `00_engine`)
 
-| 区间 | 起 | 止 |
+| Period | Start | End |
 |---|---|---|
 | IS | 2012-08-01 | 2019-12-31 |
 | OOS | 2020-01-01 | 2026-09-30 |
 | OOS ex-2020 | 2021-01-01 | 2026-09-30 |
-| 实盘模拟 | 2026-10-01 | 2026-10-20（以实际数据为准） |
+| Live simulation | 2026-10-01 | 2026-10-20 (subject to actual data) |
 
-策略和参数只依据 2026-09-30 及以前的结果确定。
+The strategy and its parameters were fixed using results up to and including 2026-09-30 only.
 
-**账户规则**（`portfolio_accounting.py`）
+**Account rules** (`portfolio_accounting.py`)
 
-1. 开始时一次性分配：90% 美元进美股账户，10% 按开始前最后一个汇率换成新元进新加坡账户。之后**不转账、不调回 90/10**，两边比例随涨跌漂移。
-2. 每个账户只在自己市场的有效开盘价成交，用前一个交易日（或更早）收盘得到的最新目标仓位，每天调回目标。
-3. 开盘价缺失就不成交。缺失的收盘价可以沿用旧价估值，但旧价不能用来成交。
-4. 新加坡的持仓、现金和手续费都用新元记账；估值时按当日收盘汇率换成美元。
-5. 历史账户（07）从 2012-08-01 连续运行，IS 和 OOS 是同一账户的两段，2020-01-01 不重置。10 月实盘（08）用 10 万美元重新开一个账户。
+1. Initial allocation: 90% of the money goes into the US account in USD, and 10% is converted to SGD at the last exchange rate before the start and put into the Singapore account.
+   **Threshold reset (±1pt):** at each close, if the Singapore share of total value differs from 10% by more than 1 percentage point (|share − 10%| > 1pt), a flag is set. On the first later date on which both markets have a valid opening price and a known signal, cash is moved between the two accounts at the opening so that the Singapore share goes back to 10% of total opening value (converted at the prior FX reference; the FX conversion cost is 0 in the baseline), and then each sleeve rebalances to its own target. Between resets there are no transfers and the two sides drift with returns. The `no rebalance` rows in `final_metrics.csv` are the variant without this rule.
+2. Each account trades only at the valid opening price of its own market, using the latest target weights obtained from the previous trading day's close (or earlier), and rebalances to the target every day.
+3. If the opening price is missing, no trade is made. A missing closing price may be valued at the last known price, but a stale price is never used to trade.
+4. Singapore holdings, cash and fees are booked in SGD; for valuation they are converted to USD at that day's closing exchange rate.
+5. The historical account (07) runs continuously from 2012-08-01; IS and OOS are two segments of the same account and nothing is reset on 2020-01-01. The October live simulation (08) opens a fresh account with USD 100,000.
 
-**交易成本**（单边，1 bp = 0.01%）
+**Transaction costs** (one-way, 1 bp = 0.01%)
 
 | SPY | QQQ | TQQQ | BSV | UVXY | TECL | SPXL | SQQQ | TECS | ES3 | A35 |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 0.5 | 1.5 | 1 | 1 | 6 | 35 | 16 | 3 | 15 | 10 | 10 |
 
-手续费按实际成交金额精确计算（`00_engine.rebalance_exact`）。所有价格是除权复权价，允许零碎股。换手率计算买卖两边，不除以 2。
+Fees are computed exactly on the traded amount (`00_engine.rebalance_exact`). All prices are dividend- and split-adjusted, and fractional shares are allowed. Turnover counts both buys and sells and is not divided by 2.
 
-## 5. 局限
+## 5. Limitations
 
-- 这是基于日线价格的模拟，不是真实券商成交。没有模拟日内换汇、结算、最小交易单位、最低佣金、冲击成本和融资。
-- 缺数据的日子没有逐一核对是否真的休市；最后一天如果用的是沿用价，不代表新的收盘价。
-- ES3 在 2012–2017 年零收益日较多（报价精度较粗）；A35 早年成交清淡，有可疑报价。用到次日价格的 A35 清洗规则默认关闭，可疑报价作为数据局限保留。
-- 策略结构和参数是在看过历史结果后选定的，存在选择偏差，即使 OOS 日期划分清楚也要单独说明。
-- 新加坡账户不调回 10%，比例会随时间被美股稀释，总组合的结果接近纯 V2。
+- This is a simulation on daily prices, not real broker execution. Intraday FX conversion, settlement, minimum lot sizes, minimum commissions, market impact and financing are not modelled.
+- Days with missing data were not checked one by one for whether the market was actually closed; if the last day uses a carried-forward price, it does not represent a new closing price.
+- ES3 has many zero-return days in 2012–2017 (coarse quote precision); A35 traded thinly in the early years and has suspicious quotes. The A35 cleaning rule that uses next-day prices is off by default, and the suspicious quotes are kept as a data limitation.
+- The strategy structure and parameters were chosen after looking at historical results, so there is selection bias; even though the OOS dates are clearly separated, this must be stated explicitly.
+- **CPI overlay (09).** The economic prior is that after the COVID recovery the market started to react to CPI releases; the specific rule values (previous YoY ≥ 3%, 16-event window, hit rate ≥ 70%, 3-day hold, 100% of TQQQ into UVXY) were set after looking at the data, so the OOS result is **not** a clean out-of-sample test. It triggers only 9 times (none in IS), most of the gain comes from 2023, 2024 and the October 2026 release, and maximum drawdown is not reduced. The exit is executed at the closing price (live trading would need a closing-auction order) with no slippage. The row `no CPI overlay` in `final_metrics.csv` shows the strategy without it.
+- The ±1pt threshold reset moves cash between the two accounts and assumes a zero FX conversion cost in the baseline; in practice the transfers would incur conversion costs and settlement delays. Without the reset (`no rebalance` rows), the Singapore share drifts and is diluted by the US sleeve, so the total portfolio ends up close to pure V2.
 
-`report/contribution.md` 是分工表模板，提交前每位组员填写自己的一行。
+`report/contribution.md` is a template for the division of work; each member fills in their own row before submission.

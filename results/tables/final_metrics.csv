@@ -1,17 +1,20 @@
 ﻿Strategy,Period,CAGR,Vol,Sharpe,Sortino,MDD,Calmar,Observations,Annualized_turnover
-Final V2 + Singapore (90/10 start; ±1pt threshold),IS,0.279,0.26,1.056,1.505,-0.392,0.713,1915,51.58
-Final V2 + Singapore (90/10 start; ±1pt threshold),OOS,0.435,0.268,1.45,2.135,-0.24,1.817,1742,50.14
-Final V2 + Singapore (90/10 start; ±1pt threshold),OOS ex-2020,0.335,0.26,1.215,1.785,-0.24,1.4,1484,48.92
-Final V2 + Singapore (90/10 start; no rebalance),IS,0.29,0.275,1.043,1.486,-0.414,0.701,1915,54.83
-Final V2 + Singapore (90/10 start; no rebalance),OOS,0.464,0.295,1.408,2.074,-0.268,1.731,1742,54.98
-Final V2 + Singapore (90/10 start; no rebalance),OOS ex-2020,0.35,0.287,1.165,1.711,-0.268,1.308,1484,53.72
-V2 30% (US-only),IS,0.305,0.286,1.052,1.503,-0.419,0.729,1915,57.01
+Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold),IS,0.282,0.26,1.063,1.514,-0.392,0.718,1915,51.31
+Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold),OOS,0.45,0.274,1.463,2.162,-0.24,1.879,1742,52.38
+Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold),OOS ex-2020,0.352,0.267,1.235,1.823,-0.24,1.468,1484,51.55
+"V2 + Singapore (90/10 start; ±1pt threshold), no CPI overlay",IS,0.282,0.26,1.063,1.514,-0.392,0.718,1915,51.31
+"V2 + Singapore (90/10 start; ±1pt threshold), no CPI overlay",OOS,0.435,0.268,1.45,2.135,-0.24,1.817,1742,50.14
+"V2 + Singapore (90/10 start; ±1pt threshold), no CPI overlay",OOS ex-2020,0.335,0.26,1.215,1.785,-0.24,1.4,1484,48.92
+Final V2 + CPI overlay + Singapore (90/10 start; no rebalance),IS,0.293,0.275,1.05,1.497,-0.414,0.707,1915,54.56
+Final V2 + CPI overlay + Singapore (90/10 start; no rebalance),OOS,0.481,0.301,1.423,2.104,-0.268,1.795,1742,57.45
+Final V2 + CPI overlay + Singapore (90/10 start; no rebalance),OOS ex-2020,0.369,0.295,1.188,1.753,-0.268,1.377,1484,56.62
+V2 30% (US-only),IS,0.308,0.286,1.06,1.513,-0.419,0.736,1915,56.72
 V2 30% (US-only),OOS,0.467,0.297,1.409,2.075,-0.27,1.731,1742,55.31
 V2 30% (US-only),OOS ex-2020,0.352,0.289,1.164,1.709,-0.27,1.303,1484,53.99
-V0 + Singapore (initial 90/10),IS,0.47,0.391,1.154,1.774,-0.566,0.83,1915,53.52
+V0 + Singapore (initial 90/10),IS,0.471,0.391,1.156,1.777,-0.566,0.832,1915,53.4
 V0 + Singapore (initial 90/10),OOS,1.057,0.527,1.595,2.573,-0.444,2.379,1742,55.49
 V0 + Singapore (initial 90/10),OOS ex-2020,0.562,0.481,1.143,1.755,-0.444,1.265,1484,53.67
-V0 (US-only),IS,0.515,0.433,1.15,1.773,-0.601,0.856,1915,59.09
+V0 (US-only),IS,0.516,0.433,1.152,1.776,-0.601,0.858,1915,58.96
 V0 (US-only),OOS,1.163,0.586,1.574,2.543,-0.491,2.371,1742,61.04
 V0 (US-only),OOS ex-2020,0.596,0.535,1.117,1.717,-0.491,1.214,1484,59.12
 Singapore sleeve (ES3 GARCH + A35),IS,0.028,0.115,0.294,0.413,-0.279,0.101,1915,1.47

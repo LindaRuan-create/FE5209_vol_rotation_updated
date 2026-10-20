@@ -1,9 +1,9 @@
 ﻿ticker,sleeve,signal_date,target_within_sleeve,current_total_weight,current_sleeve_share,indicative_total_weight,execution_rule
-TQQQ,US,2026-10-16,0.5463699918312547,0.48393109733720663,0.8966337112876293,0.48989375351184955,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-UVXY,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-TECL,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-SPXL,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-TECS,US,2026-10-16,0.0,0.0,0.8966337112876293,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-BSV,US,2026-10-16,0.4536300081687453,0.4127026139504225,0.8966337112876293,0.4067399577757797,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-ES3,Singapore,2026-10-15,0.692423,0.07139707899027796,0.1033662887123707,0.07157319572908587,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
-A35,Singapore,2026-10-15,0.307577,0.03196920972209276,0.1033662887123707,0.031793092983284844,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+TQQQ,US,2026-10-19,0.5470269490767564,0.49684249121679536,0.9110793573432058,0.4983849612142658,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+UVXY,US,2026-10-19,0.0,0.0,0.9110793573432058,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+TECL,US,2026-10-19,0.0,0.0,0.9110793573432058,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+SPXL,US,2026-10-19,0.0,0.0,0.9110793573432058,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+TECS,US,2026-10-19,0.0,0.0,0.9110793573432058,0.0,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+BSV,US,2026-10-19,0.4529730509232436,0.4142368661264105,0.9110793573432058,0.41269439612894,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+ES3,Singapore,2026-10-20,0.692423,0.06147016668907786,0.08892064265679417,0.06157069815034539,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band
+A35,Singapore,2026-10-20,0.307577,0.027450475967716305,0.08892064265679417,0.02734994450644878,Next valid local source opening; refresh prior-known target; sleeve reset to target only if share leaves the +/-1.0pt band

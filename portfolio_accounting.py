@@ -137,11 +137,17 @@ class _SleeveRunner:
 
     `step(i, d, cash_adjust)` optionally adds a cross-sleeve transfer (local
     currency) to cash immediately before that date's rebalance.
+
+    `close_events` (optional) maps a date to (signal_date, target weights). On
+    that date, after the normal opening rebalance, the sleeve is rebalanced once
+    more at the SOURCE CLOSING price to the given weights, with fees on the actual
+    notional. Used only for the CPI hedge exit; without it behaviour is unchanged.
     """
 
-    def __init__(self, market, weights, timeline, capital, rebalance):
+    def __init__(self, market, weights, timeline, capital, rebalance, close_events=None):
         if rebalance not in {'daily', 'on_change', 'buy_hold'}:
             raise ValueError('Unknown rebalance mode.')
+        self.close_events = {pd.Timestamp(k): v for k, v in (close_events or {}).items()}
         _check_dates(weights, 'Weights')
         names = list(weights.columns)
         if not set(names).issubset(market.opens.columns):
@@ -239,6 +245,39 @@ class _SleeveRunner:
                     status = 'Rebalanced at source opening' if notional_usd > self.epsilon else 'At target; no material trade'
                     if transfer:
                         status += '; incl. cross-sleeve transfer'
+        if d in self.close_events and i > 0:
+            event_signal, event_w = self.close_events[d]
+            event_w = np.asarray(event_w, float)
+            close_ok = d in market.closes.index
+            if close_ok:
+                cpx = market.closes.loc[d, names].to_numpy(float)
+                close_ok = bool(np.isfinite(cpx).all() and (cpx > 0).all())
+            if not close_ok:
+                status += '; close exit skipped (no source closing quote)'
+            else:
+                if not np.isfinite(event_w).all() or (event_w < -1e-10).any() or event_w.sum() > 1 + 1e-8:
+                    raise ValueError(f'{market.name}: invalid close-event weights on {d}.')
+                ref_date, ref_fx = _asof(market.fx, d, strict=True)
+                current = self.qty * cpx
+                value = self.cash + current.sum()
+                delta, costs = ENGINE['rebalance_exact'](value, current, event_w, self.rates)
+                target = current + delta
+                self.qty = target / cpx
+                self.cash = max(float(value - target.sum() - costs.sum()), 0.0)
+                for j in np.flatnonzero(np.abs(delta) > self.epsilon):
+                    self.trades.append(dict(exec_date=d, signal_date=event_signal, ticker=names[j],
+                        sleeve=market.name, side='BUY' if delta[j] > 0 else 'SELL',
+                        shares=abs(delta[j]) / cpx[j], price_local=cpx[j], price_usd=cpx[j] / ref_fx,
+                        currency=market.currency, notional_local=abs(delta[j]), notional_usd=abs(delta[j]) / ref_fx,
+                        cost_local=costs[j], cost_usd=costs[j] / ref_fx, cost_bps=self.rates[j] * 1e4,
+                        weight_before=current[j] / value, weight_after=event_w[j], fx_reference=ref_fx,
+                        fx_reference_date=ref_date, execution_quote_date=d,
+                        note='CPI hedge exit at source closing price'))
+                total_cost_usd += costs.sum() / ref_fx
+                notional_usd += np.abs(delta).sum() / ref_fx
+                turnover += np.abs(delta).sum() / value
+                self.previous_executed = event_w.copy()
+                status += '; CPI hedge exit at close'
         mark_fx_date, mark_fx = _asof(market.fx, d)
         values = self.qty * self.marks.loc[d].to_numpy(float)
         nav_local = self.cash + values.sum()
@@ -262,14 +301,14 @@ class _SleeveRunner:
                 'capital': self.capital, 'funding_fx': self.funding_fx, 'funding_fx_date': self.funding_fx_date}
 
 
-def run_sleeve(market, weights, timeline, capital, rebalance='daily'):
+def run_sleeve(market, weights, timeline, capital, rebalance='daily', close_events=None):
     """Self-financing local-currency ledger; only genuine source openings can trade.
 
     A missing opening blocks sleeve rebalancing for that date. Latest prior target
     replaces any older unexecuted target. A single sleeve never transfers cash;
     cross-sleeve transfers exist only inside run_portfolio(rebalance_band=...).
     """
-    runner = _SleeveRunner(market, weights, timeline, capital, rebalance)
+    runner = _SleeveRunner(market, weights, timeline, capital, rebalance, close_events)
     for i, d in enumerate(timeline):
         runner.step(i, d)
     return runner.result()
@@ -324,7 +363,7 @@ def combine_results(us, sg, capital, transfers=None, band=None):
 
 def run_portfolio(us, sg, us_weights, sg_weights, start, end=None, capital=100000.0,
                   initial_sg_share=INITIAL_SG_SHARE, rebalance='daily',
-                  rebalance_band=None, fx_bps=0.0):
+                  rebalance_band=None, fx_bps=0.0, us_close_events=None):
     """Two independent sleeves, funded initial_sg_share / (1 - initial_sg_share).
 
     rebalance_band=None : no cross-sleeve transfer ever (sleeve shares drift).
@@ -341,10 +380,10 @@ def run_portfolio(us, sg, us_weights, sg_weights, start, end=None, capital=10000
         raise ValueError('rebalance_band must be positive or None.')
     timeline = common_timeline((us,sg),start,end)
     if rebalance_band is None:
-        u = run_sleeve(us,us_weights,timeline,capital*(1-initial_sg_share),rebalance)
+        u = run_sleeve(us,us_weights,timeline,capital*(1-initial_sg_share),rebalance,us_close_events)
         s = run_sleeve(sg,sg_weights,timeline,capital*initial_sg_share,rebalance)
         return combine_results(u,s,capital)
-    ru = _SleeveRunner(us, us_weights, timeline, capital*(1-initial_sg_share), rebalance)
+    ru = _SleeveRunner(us, us_weights, timeline, capital*(1-initial_sg_share), rebalance, us_close_events)
     rs = _SleeveRunner(sg, sg_weights, timeline, capital*initial_sg_share, rebalance)
     pending, flag_date, flag_share, transfers = False, None, np.nan, []
     for i, d in enumerate(timeline):

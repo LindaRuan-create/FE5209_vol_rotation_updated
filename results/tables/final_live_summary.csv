@@ -1,5 +1,5 @@
 ﻿Strategy,Period,Valuation_days,Ending_equity,Total_return,Max_drawdown,Trade_count,Total_cost_USD,US_sleeve_share,SG_sleeve_share,SG_quote_date,Valuation_status
-Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold),2026-10-01~2026-10-20,14,107663.55,+7.66%,-3.78%,61,161.75,0.9110793573432058,0.08892064265679417,2026-10-20,Source closing quotes available
-Buy and hold SPY (entry fee included),2026-10-01~2026-10-20,14,100272.34,+0.27%,-2.03%,1,5.0,,,,
-Buy and hold QQQ (entry fee included),2026-10-01~2026-10-20,14,96733.01,-3.27%,-6.56%,1,15.0,,,,
-Buy and hold TQQQ (entry fee included),2026-10-01~2026-10-20,14,89544.8,-10.46%,-19.04%,1,10.0,,,,
+Final V2 + CPI overlay + Singapore (90/10 start; ±1pt threshold),2026-10-01~2026-10-20,14,107473.25,+7.47%,-3.78%,65,162.97,0.9007758371516787,0.09922416284832124,2026-10-20,Source closing quotes available
+Buy and hold SPY (entry fee included),2026-10-01~2026-10-20,14,100608.56,+0.61%,-2.03%,1,5.0,,,,
+Buy and hold QQQ (entry fee included),2026-10-01~2026-10-20,14,96634.71,-3.37%,-6.56%,1,15.0,,,,
+Buy and hold TQQQ (entry fee included),2026-10-01~2026-10-20,14,89253.25,-10.75%,-19.04%,1,10.0,,,,
